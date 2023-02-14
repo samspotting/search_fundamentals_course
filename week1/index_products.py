@@ -134,8 +134,9 @@ def create_index(index_name):
     client = get_opensearch()
     # Create an index with non-default settings.
     index_name = index_name
-    index_body = json.loads("/workspace/search_fundamentals_course/opensearch/bbuy_products.json")
-    response = client.indices.create(index_name, body=index_body)
+    with open("/workspace/search_fundamentals_course/opensearch/bbuy_products.json", "r") as read_file:
+        index_body = json.load(read_file)
+        response = client.indices.create(index_name, body=index_body)
     print('\nCreating index:')
     print(response)
 
@@ -151,7 +152,7 @@ def delete_index(index_name):
 
 # bbuy_products prod
 @click.command()
-@click.option('--create/--no-create', default=False)
+@click.option('--create/--no-create', default=True)
 @click.option('--source_dir', '-s', default="/workspace/datasets/product_data/products_test/", help='XML files source directory')
 @click.option('--index_name', '-i', default="test", help="The name of the index to write to")
 @click.option('--workers', '-w', default=8, help="The number of workers to use to process files")
