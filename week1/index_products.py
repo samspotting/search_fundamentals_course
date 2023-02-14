@@ -3,6 +3,7 @@ import opensearchpy
 import requests
 from lxml import etree
 
+import json
 import click
 import glob
 from opensearchpy import OpenSearch
@@ -113,20 +114,54 @@ def index_file(file, index_name):
             xpath_expr = mappings[idx]
             key = mappings[idx + 1]
             doc[key] = child.xpath(xpath_expr)
-        print(doc)
         if 'productId' not in doc or len(doc['productId']) == 0:
             continue
         #### Step 2.b: Create a valid OpenSearch Doc and bulk index 2000 docs at a time
-        the_doc = None
+        the_doc = doc
+        the_doc["_index"] = index_name
+        the_doc["_id"] = doc['productId'][0]
         docs.append(the_doc)
+
+        if len(docs) == 200:
+            docs_indexed += bulk(client, docs)[0]
+            docs = []
+    if docs:
+        docs_indexed += bulk(client, docs)[0]
 
     return docs_indexed
 
+def create_index(index_name):
+    client = get_opensearch()
+    # Create an index with non-default settings.
+    index_name = index_name
+    index_body = json.loads("/workspace/search_fundamentals_course/opensearch/bbuy_products.json")
+    response = client.indices.create(index_name, body=index_body)
+    print('\nCreating index:')
+    print(response)
+
+
+def delete_index(index_name):
+    client = get_opensearch()
+    # Create an index with non-default settings.
+    index_name = index_name
+    response = client.indices.delete(index_name)
+    print('\DELETE index:')
+    print(response)
+
+
+# bbuy_products prod
 @click.command()
-@click.option('--source_dir', '-s', help='XML files source directory')
-@click.option('--index_name', '-i', default="bbuy_products", help="The name of the index to write to")
+@click.option('--create/--no-create', default=False)
+@click.option('--source_dir', '-s', default="/workspace/datasets/product_data/products_test/", help='XML files source directory')
+@click.option('--index_name', '-i', default="test", help="The name of the index to write to")
 @click.option('--workers', '-w', default=8, help="The number of workers to use to process files")
-def main(source_dir: str, index_name: str, workers: int):
+def main(create: bool, source_dir: str, index_name: str, workers: int):
+    if create:
+        try:
+            delete_index(index_name)
+        except:
+            pass
+        create_index(index_name)
 
     files = glob.glob(source_dir + "/*.xml")
     docs_indexed = 0
