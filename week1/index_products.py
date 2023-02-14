@@ -150,11 +150,11 @@ def delete_index(index_name):
     print(response)
 
 
-# bbuy_products prod
+#  prod
 @click.command()
-@click.option('--create/--no-create', default=True)
+@click.option('--create/--no-create', default=False)
 @click.option('--source_dir', '-s', default="/workspace/datasets/product_data/products_test/", help='XML files source directory')
-@click.option('--index_name', '-i', default="test", help="The name of the index to write to")
+@click.option('--index_name', '-i', default="bbuy_products", help="The name of the index to write to")
 @click.option('--workers', '-w', default=8, help="The number of workers to use to process files")
 def main(create: bool, source_dir: str, index_name: str, workers: int):
     if create:
