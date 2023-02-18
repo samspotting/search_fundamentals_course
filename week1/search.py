@@ -94,7 +94,10 @@ def query():
     print("query obj: {}".format(query_obj))
 
     #### Step 4.b.ii
-    response = None   # TODO: Replace me with an appropriate call to OpenSearch
+    response = opensearch.search(
+        body = query_obj,
+        index = "bbuy_products"
+    )   # TODO: Replace me with an appropriate call to OpenSearch
     # Postprocess results here if you so desire
 
     #print(response)
@@ -108,14 +111,68 @@ def query():
 
 def create_query(user_query, filters, sort="_score", sortDir="desc"):
     print("Query: {} Filters: {} Sort: {}".format(user_query, filters, sort))
+
     query_obj = {
         'size': 10,
         "query": {
-            "match_all": {} # Replace me with a query that both searches and filters
+            "bool": {
+                "must": [
+                    {
+                        "query_string": {
+                            "fields": [ "name", "shortDescription", "longDescription" ],
+                            "query": user_query,
+                            "phrase_slop": 3
+                        }
+                    }
+                ]
+            }
         },
-        "aggs": {
-            #### Step 4.b.i: create the appropriate query and aggregations here
-
+        "highlight": {
+            "fields": {
+                "name": {},
+                "shortDescription": {},
+                "longDescription": {}
+            }
+        },
+        'aggs': {
+            "regularPrice": {
+                "range": {
+                    "field": "regularPrice",
+                    "ranges": [
+                        {
+                            "to": 5
+                        },
+                        {
+                            "from": 5,
+                            "to": 20
+                        },
+                        {
+                            "from": 20,
+                        }
+                    ]
+                }
+            },
+            "department": {
+                "terms": {
+                    "field": "department",
+                    "size": 10,
+                    "min_doc_count": 0
+                }
+            },
+            "missing_images": {
+                "missing": { "field": "image" }
+            }
         }
     }
+    
+    if filters:
+        query_obj['query']['bool']['filter'] = filters
+    if sort:
+        """
+        """
+        query_obj['sort'] = {
+            sort: {
+                "order": sortDir
+            }
+        }
     return query_obj

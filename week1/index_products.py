@@ -2,6 +2,8 @@
 import opensearchpy
 import requests
 from lxml import etree
+import collections
+import random
 
 import json
 import click
@@ -9,6 +11,7 @@ import glob
 from opensearchpy import OpenSearch
 from opensearchpy.helpers import bulk
 import logging
+import re
 
 from time import perf_counter
 import concurrent.futures
@@ -100,6 +103,11 @@ def get_opensearch():
     return client
 
 
+def remove_periods(s):
+    s = s.split('.')
+    s[0]+'.'+''.join(s[1:])
+    return s
+
 def index_file(file, index_name):
     docs_indexed = 0
     client = get_opensearch()
@@ -107,6 +115,7 @@ def index_file(file, index_name):
     tree = etree.parse(file)
     root = tree.getroot()
     children = root.findall("./product")
+    non_decimal = re.compile(r'[^\d.]+')
     docs = []
     for child in children:
         doc = {}
@@ -117,9 +126,16 @@ def index_file(file, index_name):
         if 'productId' not in doc or len(doc['productId']) == 0:
             continue
         #### Step 2.b: Create a valid OpenSearch Doc and bulk index 2000 docs at a time
-        the_doc = doc
+        the_doc = {}
         the_doc["_index"] = index_name
-        the_doc["_id"] = doc['productId'][0]
+        the_doc["_id"] = doc['sku'][0]
+        the_doc["_source"] = doc
+        for field in ['weight', 'height', 'depth', 'width']:
+            if field in doc and doc[field]:
+                if isinstance(the_doc["_source"][field], collections.abc.Sequence) and len(the_doc["_source"][field]) == 1:
+                    the_doc["_source"][field] = [remove_periods(non_decimal.sub('', x)) for x in the_doc["_source"][field]]
+                else:
+                    the_doc["_source"][field] = remove_periods(non_decimal.sub('', the_doc["_source"][field]))
         docs.append(the_doc)
 
         if len(docs) == 200:
@@ -153,10 +169,14 @@ def delete_index(index_name):
 #  prod
 @click.command()
 @click.option('--create/--no-create', default=False)
-@click.option('--source_dir', '-s', default="/workspace/datasets/product_data/products_test/", help='XML files source directory')
+@click.option('--source_dir', '-s', default="/workspace/datasets/product_data/products/", help='XML files source directory')
 @click.option('--index_name', '-i', default="bbuy_products", help="The name of the index to write to")
 @click.option('--workers', '-w', default=8, help="The number of workers to use to process files")
 def main(create: bool, source_dir: str, index_name: str, workers: int):
+    max_files = 10000000
+    if create:
+        index_name = 'test'
+        max_files = 10
     if create:
         try:
             delete_index(index_name)
@@ -165,10 +185,12 @@ def main(create: bool, source_dir: str, index_name: str, workers: int):
         create_index(index_name)
 
     files = glob.glob(source_dir + "/*.xml")
+    if create:
+        random.shuffle(files)
     docs_indexed = 0
     start = perf_counter()
     with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as executor:
-        futures = [executor.submit(index_file, file, index_name) for file in files]
+        futures = [executor.submit(index_file, file, index_name) for file in files[:max_files]]
         for future in concurrent.futures.as_completed(futures):
             docs_indexed += future.result()
 
