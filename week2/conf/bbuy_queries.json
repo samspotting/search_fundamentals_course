@@ -3,7 +3,7 @@
     "index.refresh_interval": "5s",
     "analysis": {
       "analyzer": {
-        "trigram": {
+        "trigrams": {
             "type": "custom",
             "tokenizer": "standard",
             "filter": ["lowercase","shingle"]
@@ -54,8 +54,18 @@
           }
         }
       },
-      "TODO: REPLACE WITH SUGGEST": {
-        "REPLACE": "REPLACE"
+      "suggest": {
+        "type": "completion",
+        "fields": {
+          "trigrams": {
+            "analyzer": "trigrams",
+            "type": "text"
+          },
+          "text": {
+            "analyzer": "english",
+            "type": "text"
+          }
+        }
       },
       "canonical": {
         "type": "text"

@@ -1,4 +1,6 @@
 import math
+from collections import defaultdict
+
 # some helpful tools for dealing with queries
 def create_stats_query(aggs, extended=True):
     print("Creating stats query from %s" % aggs)
@@ -159,16 +161,33 @@ def create_query(user_query, filters, sort="_score", sortDir="desc", size=10, in
 # Give a user query from the UI and the query object we've built so far, adding in spelling suggestions
 def add_spelling_suggestions(query_obj, user_query):
     #### W2, L2, S1
-    print("TODO: IMPLEMENT ME")
-    #query_obj["suggest"] = {
-    #    "text": user_query,
-    #    "phrase_suggest": {
-
-    #    },
-    #    "term_suggest": {
-
-    #    }
-    #}
+    query_obj["suggest"] = {
+        "text": user_query,
+        "phrase_suggest": {
+            "phrase":{
+                "field": "suggest.trigrams",
+                "max_errors": 3,
+                "direct_generator": [ 
+                    {
+                        "field": "suggest.trigrams",
+                        "min_word_length": 2,
+                        "suggest_mode": "popular"
+                    }
+                ],
+                "highlight": {
+                    "pre_tag": "<em>",
+                    "post_tag": "</em>"
+                }
+            }
+        },
+        "term_suggest": {
+            "term": {
+                "field": "suggest.text",
+                "min_word_length": 3,
+                "suggest_mode": "popular"
+            }
+        }
+    }
 
 
 # Given the user query from the UI, the query object we've built so far and a Pandas data GroupBy data frame,
@@ -178,15 +197,24 @@ def add_click_priors(query_obj, user_query, priors_gb):
     try:
         prior_clicks_for_query = priors_gb.get_group(user_query)
         if prior_clicks_for_query is not None and len(prior_clicks_for_query) > 0:
-            click_prior = ""
-            #### W2, L1, S1
-            # Create a string object of SKUs and weights that will boost documents matching the SKU
-            print("TODO: Implement me")
-            if click_prior != "":
-                click_prior_query_obj = None # Implement a query object that matches on the ID or SKU with weights of
-                # This may feel like cheating, but it's really not, esp. in ecommerce where you have all this prior data,
-                if click_prior_query_obj is not None:
-                    query_obj["query"]["function_score"]["query"]["bool"]["should"].append(click_prior_query_obj)
+            sku_to_clicks = defaultdict(int)
+            total = 0
+            for name, group in prior_clicks_for_query.iterrows():
+                sku_to_clicks[group['sku']] += 1
+                total += 1
+            query_strings = []
+            for name, clicks in sku_to_clicks.items():
+                query_strings.append("%s^%.3f" % (name, float(sku_to_clicks[name]) / total))
+            click_prior_query_obj = {
+                "query_string": {
+                    "query": " ".join(query_strings),
+                    "fields": ["sku"],
+                    "default_operator": "OR"
+                }
+            } # Implement a query object that matches on the ID or SKU with weights of
+            # This may feel like cheating, but it's really not, esp. in ecommerce where you have all this prior data,
+            if click_prior_query_obj is not None:
+                query_obj["query"]["function_score"]["query"]["bool"]["should"].append(click_prior_query_obj)
     except KeyError as ke:
         print(ke)
         print(f"Can't process user_query: {user_query} for click priors")
